@@ -1,0 +1,49 @@
+name: macOS IDE startup check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ide-startup:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Download the OculiX IDE jar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download v4.0.0 -R oculix-org/Oculix -p 'oculixide-4.0.0-macos.jar'
+
+      - name: Start the IDE and wait
+        run: |
+          java -jar oculixide-4.0.0-macos.jar > ide.log 2>&1 &
+          echo $! > ide.pid
+          sleep 90
+
+      - name: Screenshot, thread dump, logs
+        if: always()
+        run: |
+          screencapture -x screen.png || true
+          PID=$(cat ide.pid)
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "IDE still running after 90 s"
+            jstack "$PID" > jstack.txt || true
+          else
+            echo "IDE exited" > jstack.txt
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ide-startup-${{ matrix.os }}
+          path: |
+            screen.png
+            jstack.txt
+            ide.log
