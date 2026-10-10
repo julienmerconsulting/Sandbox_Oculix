@@ -1,0 +1,92 @@
+name: icon_detect_v3 through Apertix dnn, per Legerix tier
+
+# Reproduces the local setup on each OS GitHub offers: clone the OculiX branch, let Maven pull
+# Apertix 4.14.0-0 from Central into the runner's .m2, build the API fat jar with the OS profile,
+# then run V3Onnx.java against that jar on xlaunch.png. The ONNX weights (232 MB) come from the
+# release `v3-onnx` of this repository. Seven jobs = the seven Legerix tiers; Apertix 4.14.0-0 ships
+# natives for all of them (plus linux-arm and win32-x86, which have no GitHub runner).
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: OculiX branch to build
+        default: feat/extended-screen-capture
+      conf:
+        description: confidence threshold
+        default: "0.05"
+
+jobs:
+  detect:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tier: win32-x86-64
+            os: windows-latest
+            profile: complete-win-jar
+            jar: complete-win
+          - tier: linux-x86-64
+            os: ubuntu-latest
+            profile: complete-lux-jar
+            jar: complete-lux
+          - tier: linux-x86-64-legacy
+            os: ubuntu-22.04
+            profile: complete-lux-jar
+            jar: complete-lux
+          - tier: linux-aarch64
+            os: ubuntu-24.04-arm
+            profile: complete-lux-jar
+            jar: complete-lux
+          - tier: linux-aarch64-legacy
+            os: ubuntu-22.04-arm
+            profile: complete-lux-jar
+            jar: complete-lux
+          - tier: darwin-aarch64
+            os: macos-15
+            profile: complete-mac-jar
+            jar: complete-mac
+          - tier: darwin
+            os: macos-15-intel
+            profile: complete-mac-jar
+            jar: complete-mac
+    name: ${{ matrix.tier }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: oculix-org/Oculix
+          ref: ${{ inputs.branch }}
+          path: oculix
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Build the API fat jar (Apertix 4.14.0-0 resolved from Central into .m2)
+        shell: bash
+        working-directory: oculix
+        run: mvn -B -pl API -am package -DskipTests -P${{ matrix.profile }}
+
+      - name: Fetch the ONNX weights from the v3-onnx release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download v3-onnx -p model.onnx
+
+      - name: Run the detector through Apertix dnn
+        shell: bash
+        run: |
+          JAR=$(ls oculix/API/target/oculixapi-*-${{ matrix.jar }}.jar)
+          echo "jar: $JAR"
+          java --enable-native-access=ALL-UNNAMED -cp "$JAR" V3Onnx.java xlaunch.png ${{ inputs.conf }} model.onnx 2>&1 | tee detect-${{ matrix.tier }}.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: detect-${{ matrix.tier }}
+          path: detect-${{ matrix.tier }}.log
