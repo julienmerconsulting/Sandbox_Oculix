@@ -83,10 +83,5 @@ jobs:
         run: |
           JAR=$(ls oculix/API/target/oculixapi-*-${{ matrix.jar }}.jar)
           echo "jar: $JAR"
-          java --enable-native-access=ALL-UNNAMED -cp "$JAR" V3Onnx.java xlaunch.png ${{ inputs.conf }} model.onnx 2>&1 | tee detect-${{ matrix.tier }}.log
+          java --enable-native-access=ALL-UNNAMED -cp "$JAR" V3Onnx.java xlaunch.png ${{ inputs.conf }} model.onnx 2>&1
 
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: detect-${{ matrix.tier }}
-          path: detect-${{ matrix.tier }}.log
