@@ -20,7 +20,9 @@ import org.opencv.imgproc.Imgproc;
  * OmniParser icon_detect_v3 (YOLOv9-E, MIT) run through OpenCV dnn inside the JVM, Apertix only.
  *
  * java -cp oculixapi-4.0.0-complete-win.jar V3Onnx.java image.png [conf] [model.onnx]
- * (the Apertix jar alone is not enough: its loader wants JNA on the classpath)
+ * OpenCV is loaded through OculiX's Commons.loadOpenCV(), the path the product takes: on Linux it
+ * extracts the right glibc tier itself. Apertix's own loadLocally() fails there: JNA 5.18 deletes
+ * the extracted .so right after dlopen and the loader then System.load()s a path that is gone.
  *
  * Same pipeline as icon_detect_v3_on_image.py: letterbox 640 on grey 114, six raw heads
  * (logits + distances at strides 8/16/32), sigmoid, box = anchor -/+ distance * stride,
@@ -39,7 +41,7 @@ public class V3Onnx {
         String model = args.length > 2 ? args[2] : MODEL;
 
         long t0 = System.nanoTime();
-        nu.pattern.OpenCV.loadLocally();
+        org.sikuli.support.Commons.loadOpenCV();
         System.out.printf("opencv       %d ms  %s  %s/%s%n", ms(t0), Core.VERSION,
                 System.getProperty("os.name"), System.getProperty("os.arch"));
 
