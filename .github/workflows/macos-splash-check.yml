@@ -1,0 +1,61 @@
+name: macOS splash check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  splash:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Download the OculiX IDE jar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download splash-test -R ${{ github.repository }} -p 'oculixide-4.0.0-complete-mac.jar'
+
+      - name: Display
+        run: system_profiler SPDisplaysDataType
+
+      - name: Start the IDE, record the screen, capture every 2 s
+        run: |
+          mkdir shots
+          screencapture -x -V 40 shots/startup.mov > shots/video.log 2>&1 &
+          VIDEO=$!
+          java -jar oculixide-4.0.0-complete-mac.jar > ide.log 2>&1 &
+          echo $! > ide.pid
+          for i in $(seq -w 1 20); do
+            screencapture -x -t jpg shots/shot_$i.jpg || true
+            sleep 2
+          done
+          wait $VIDEO || true
+          sleep 45
+
+      - name: Last screenshot, thread dump, log
+        if: always()
+        run: |
+          screencapture -x shots/final.png || true
+          PID=$(cat ide.pid)
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "IDE still running"
+            jstack "$PID" > jstack.txt || true
+          else
+            echo "IDE exited" > jstack.txt
+          fi
+          cat ide.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: splash-${{ matrix.os }}
+          path: |
+            shots/
+            jstack.txt
+            ide.log
