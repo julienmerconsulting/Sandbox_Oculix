@@ -43,7 +43,7 @@ jobs:
           cat devices.txt
           IDX=$(grep -o '\[[0-9]*\] Capture screen 0' devices.txt | grep -o '[0-9]*' | head -1)
           echo "screen device index: $IDX"
-          nohup bash -c "while true; do ffmpeg -hide_banner -loglevel warning -f avfoundation -framerate 30 -capture_cursor 1 -i '${IDX}:none' -vf scale=1280:-2 -r 15 -c:v mjpeg -q:v 6 -f mpjpeg -listen 1 http://${TSIP}:8080/live; sleep 1; done" > ffmpeg.log 2>&1 &
+          nohup bash -c "while true; do ffmpeg -hide_banner -loglevel warning -f avfoundation -framerate 30 -capture_cursor 1 -i '${IDX}:none' -vf scale=1280:-2 -r 15 -c:v mjpeg -q:v 6 -f mpjpeg -content_type 'multipart/x-mixed-replace;boundary=ffmpeg' -listen 1 http://${TSIP}:8080/live; sleep 1; done" > ffmpeg.log 2>&1 &
           sleep 3
           echo "Open http://runner-mac:8080/live in your browser"
 
