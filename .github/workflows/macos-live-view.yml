@@ -99,11 +99,11 @@ jobs:
           s = Screen()
           print("SCREEN: " + str(s))
 
-          m = s.find(Pattern(work + "/target.png").similar(0.8))
+          m = s.wait(Pattern(work + "/target.png").similar(0.8), 15)
           print("FIND TARGET: score %.3f, %s" % (m.getScore(), m))
           m.highlight(2)
 
-          t = s.findText("OculiX")
+          t = s.waitText("OculiX", 15)
           print("FIND TEXT: " + str(t))
           t.highlight(2)
 
