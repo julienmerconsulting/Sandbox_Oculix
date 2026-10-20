@@ -53,7 +53,8 @@ jobs:
         run: cat ocr.log
 
       - name: The text must come back
-        run: grep -q "OCR CHECK: \[OculiX reads on this Mac\]" ocr.log
+        run: |
+          grep -q "OCR CHECK: \[OculiX reads on this Mac\]" ocr.log
 
       - uses: actions/upload-artifact@v4
         if: always()
