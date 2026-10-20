@@ -62,8 +62,18 @@ jobs:
           print("IMAGES READY")
           EOF
           cat > screen_check.sikuli/screen_check.py <<'EOF'
+          from java.awt import SplashScreen, Window
           from java.lang import System
           from org.sikuli.script import Pattern, Screen
+
+          splash = SplashScreen.getSplashScreen()
+          if splash is not None:
+              splash.close()
+              print("NATIVE SPLASH CLOSED")
+          for win in Window.getWindows():
+              if win.isShowing():
+                  print("CLOSING WINDOW: " + win.getClass().getName())
+                  win.dispose()
 
           work = System.getenv("GITHUB_WORKSPACE")
           s = Screen()
