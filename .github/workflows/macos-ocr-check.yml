@@ -1,0 +1,62 @@
+name: macOS OCR check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ocr:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Download the OculiX IDE jar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download splash-test -R ${{ github.repository }} -p 'oculixide-4.0.0-complete-mac.jar'
+
+      - name: Architecture
+        run: uname -m
+
+      - name: Write a script that renders a line of text and reads it back
+        run: |
+          mkdir ocr_check.sikuli
+          cat > ocr_check.sikuli/ocr_check.py <<'EOF'
+          from java.awt import Color, Font, RenderingHints
+          from java.awt.image import BufferedImage
+          from org.sikuli.script import OCR
+
+          img = BufferedImage(900, 120, BufferedImage.TYPE_INT_RGB)
+          g = img.createGraphics()
+          g.setColor(Color.WHITE)
+          g.fillRect(0, 0, 900, 120)
+          g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+          g.setColor(Color.BLACK)
+          g.setFont(Font("SansSerif", Font.PLAIN, 48))
+          g.drawString("OculiX reads on this Mac", 20, 80)
+          g.dispose()
+
+          print("OCR CHECK: [" + OCR.readText(img).strip() + "]")
+          EOF
+
+      - name: Run the script, which loads Legerix on first OCR
+        run: java -jar oculixide-4.0.0-complete-mac.jar -d 3 -r ocr_check.sikuli > ocr.log 2>&1 || true
+
+      - name: Log
+        if: always()
+        run: cat ocr.log
+
+      - name: The text must come back
+        run: grep -q "OCR CHECK: \[OculiX reads on this Mac\]" ocr.log
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ocr-${{ matrix.os }}
+          path: ocr.log
