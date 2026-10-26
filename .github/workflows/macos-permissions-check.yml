@@ -1,0 +1,112 @@
+name: macOS permissions check
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: Runner
+        type: choice
+        options: [macos-15, macos-15-intel]
+        default: macos-15
+      release:
+        description: Sandbox release holding the jar
+        default: splash-test
+      jar:
+        description: Jar file name in that release
+        default: oculixide-4.0.0-complete-mac.jar
+      wait_before:
+        description: Seconds to wait before the tests, time to open the stream
+        default: '90'
+      watch_minutes:
+        description: Minutes to keep the runner alive after the tests
+        default: '2'
+
+jobs:
+  permissions:
+    runs-on: ${{ inputs.os }}
+    steps:
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Join the tailnet as runner-mac
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          hostname: runner-mac
+
+      - name: Install ffmpeg
+        run: |
+          brew install ffmpeg
+
+      - name: Stream the screen as MJPEG, on the tailnet address only
+        run: |
+          TSIP=$(tailscale ip -4 | head -1)
+          echo "tailnet address: $TSIP"
+          ffmpeg -hide_banner -f avfoundation -list_devices true -i "" > devices.txt 2>&1 || true
+          cat devices.txt
+          IDX=$(grep -o '\[[0-9]*\] Capture screen 0' devices.txt | grep -o '[0-9]*' | head -1)
+          echo "screen device index: $IDX"
+          nohup bash -c "while true; do ffmpeg -hide_banner -loglevel warning -f avfoundation -framerate 30 -capture_cursor 1 -i '${IDX}:none' -vf scale=1280:-2 -r 15 -c:v mjpeg -q:v 6 -f mpjpeg -content_type 'multipart/x-mixed-replace;boundary=ffmpeg' -listen 1 http://${TSIP}:8080/live; sleep 1; done" > ffmpeg.log 2>&1 &
+          sleep 3
+          echo "Open http://${TSIP}:8080/live in the browser"
+
+      - name: Time to open the stream
+        run: |
+          sleep ${{ inputs.wait_before }}
+
+      - name: Download the OculiX IDE jar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ inputs.release }}" -R ${{ github.repository }} -p "${{ inputs.jar }}"
+          ls -l "${{ inputs.jar }}"
+
+      - name: Write the script that captures the screen
+        run: |
+          mkdir perm_check.sikuli
+          cat > perm_check.sikuli/perm_check.py <<'EOF'
+          from org.sikuli.script import Screen
+          shot = Screen().capture().getImage()
+          print("CAPTURE OK %dx%d" % (shot.getWidth(), shot.getHeight()))
+          EOF
+
+      - name: "1: nothing changed, the runner's permissions"
+        run: |
+          set +e
+          java -jar "${{ inputs.jar }}" -r perm_check.sikuli > granted.log 2>&1
+          echo "exit code: $?" | tee -a granted.log
+          cat granted.log
+
+      - name: Take Screen Recording away, Accessibility stays
+        run: sudo tccutil reset ScreenCapture
+
+      - name: "2: -r without Screen Recording, it stops and macOS asks"
+        run: |
+          set +e
+          java -jar "${{ inputs.jar }}" -r perm_check.sikuli > refused.log 2>&1
+          echo "exit code: $?" | tee -a refused.log
+          cat refused.log
+
+      - name: "3: the IDE without Screen Recording, macOS asks and the 5 second notice shows"
+        run: |
+          set +e
+          java -jar "${{ inputs.jar }}" > ide.log 2>&1
+          echo "exit code: $?" | tee -a ide.log
+          cat ide.log
+
+      - name: Each test must have said what it should
+        run: |
+          grep -q "CAPTURE OK" granted.log
+          grep -q "Missing permission:" refused.log
+          grep -q "Screen Recording, to see the screen" refused.log
+          ! grep -q "Accessibility, to use" refused.log
+          grep -q "exit code: 1" refused.log
+          grep -q "Missing permission:" ide.log
+          grep -q "exit code: 1" ide.log
+
+      - name: Keep the runner alive to watch
+        if: always()
+        run: |
+          sleep $(( ${{ inputs.watch_minutes }} * 60 ))
