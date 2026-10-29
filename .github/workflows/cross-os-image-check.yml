@@ -56,6 +56,10 @@ jobs:
         run: |
           gh release download cross-os-test -R ${{ github.repository }} -p 'oculixide-5.0.0-complete-mac.jar'
 
+      - name: Lift the quarantine Homebrew left on Chrome, so Gatekeeper does not ask
+        run: |
+          sudo xattr -dr com.apple.quarantine "/Applications/Google Chrome.app"
+
       - name: Architecture and display
         run: |
           uname -m
