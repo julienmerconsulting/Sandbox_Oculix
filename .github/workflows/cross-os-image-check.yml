@@ -1,0 +1,85 @@
+name: cross-OS image check
+
+# The same dialog captured on Windows (Paint and Chrome, screen at 125 %) and searched on macOS:
+# the PNG shown in Preview, the HTML drawn by Chrome. One RESULT line per capture: score, size found,
+# so the scale the cascade used. A measure, not a gate: the job stays green on NOT FOUND.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Download the OculiX IDE jar
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download cross-os-test -R ${{ github.repository }} -p 'oculixide-5.0.0-complete-mac.jar'
+
+      - name: Architecture and display
+        run: |
+          uname -m
+          system_profiler SPDisplaysDataType
+
+      - name: Write the search script
+        run: |
+          mkdir probe.sikuli
+          cat > probe.sikuli/probe.py <<'EOF'
+          import os, sys, time
+          from java.io import File
+          from javax.imageio import ImageIO
+          from org.sikuli.script import Pattern, Screen
+
+          folder = os.environ["GITHUB_WORKSPACE"] + "/cross-os/"
+          s = Screen()
+          print("SCREEN: %s" % s)
+          for name in sys.argv[1:]:
+              path = folder + name + ".png"
+              img = ImageIO.read(File(path))
+              w, h = img.getWidth(), img.getHeight()
+              start = time.time()
+              m = s.exists(Pattern(path).similar(0.7), 5)
+              ms = int((time.time() - start) * 1000)
+              if m is None:
+                  print("RESULT %s %dx%d: NOT FOUND (%d ms)" % (name, w, h, ms))
+              else:
+                  print("RESULT %s %dx%d: score %.3f, found %dx%d, scale %.2f, at %d,%d (%d ms)"
+                        % (name, w, h, m.getScore(), m.w, m.h, m.w / float(w), m.x, m.y, ms))
+          EOF
+
+      - name: The PNG in Preview, search the Paint captures
+        run: |
+          open -a Preview cross-os/cross-os.png
+          sleep 6
+          java -jar oculixide-5.0.0-complete-mac.jar -r probe.sikuli --args PaintApp PaintText > preview.log 2>&1 || true
+          grep -E "SCREEN|RESULT" preview.log || cat preview.log
+          screencapture -x preview.png
+
+      - name: The HTML in Chrome, search the Chrome captures
+        run: |
+          osascript -e 'quit app "Preview"'
+          open -na "Google Chrome" --args --no-first-run --no-default-browser-check "file://$GITHUB_WORKSPACE/cross-os/cross-os.html"
+          sleep 8
+          java -jar oculixide-5.0.0-complete-mac.jar -r probe.sikuli --args ChromeApp ChromeText > chrome.log 2>&1 || true
+          grep -E "SCREEN|RESULT" chrome.log || cat chrome.log
+          screencapture -x chrome.png
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cross-os-${{ matrix.os }}
+          path: |
+            preview.png
+            chrome.png

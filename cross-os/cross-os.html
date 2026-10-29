@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>cross-os</title>
+<style>
+  html, body { margin: 0; background: #ffffff; }
+  .dlg { position: absolute; left: 40px; top: 40px; width: 640px; height: 380px;
+         background: #f5f6f8; font-family: Arial, sans-serif; }
+  .title { height: 44px; background: linear-gradient(#2654a0, #447cc8); color: #fff;
+           font-weight: bold; font-size: 18px; line-height: 44px; padding-left: 18px; }
+  .icon { position: absolute; left: 32px; top: 84px; width: 64px; height: 64px;
+          border-radius: 50%; background: #f08c1e; color: #fff; font: bold 40px/64px Arial;
+          text-align: center; }
+  .l1 { position: absolute; left: 120px; top: 88px; font-size: 16px; color: #1e1e1e; }
+  .l2 { position: absolute; left: 120px; top: 116px; font-size: 16px; color: #5a5a5a; }
+  .btn { position: absolute; top: 300px; width: 120px; height: 40px; box-sizing: border-box;
+         border-radius: 6px; font: bold 15px/38px Arial; text-align: center; }
+  .save { left: 360px; background: #266ec8; color: #fff; border: 1px solid #1c5aaa; }
+  .cancel { left: 496px; background: #fff; color: #282828; border: 1px solid #aaaaaa; }
+</style></head>
+<body><div class="dlg">
+  <div class="title">Invoice export</div>
+  <div class="icon">!</div>
+  <div class="l1">Save changes to invoice 2026-0417?</div>
+  <div class="l2">Unsaved lines will be lost.</div>
+  <div class="btn save">Save</div>
+  <div class="btn cancel">Cancel</div>
+</div></body></html>
