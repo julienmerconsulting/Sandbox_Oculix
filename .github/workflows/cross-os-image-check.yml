@@ -42,7 +42,15 @@ jobs:
           cat devices.txt
           IDX=$(grep -o '\[[0-9]*\] Capture screen 0' devices.txt | grep -o '[0-9]*' | head -1)
           echo "screen device index: $IDX"
-          nohup bash -c "while true; do ffmpeg -hide_banner -loglevel warning -f avfoundation -framerate 30 -capture_cursor 1 -i '${IDX}:none' -vf scale=1280:-2 -r 15 -c:v mjpeg -q:v 6 -f mpjpeg -content_type 'multipart/x-mixed-replace;boundary=ffmpeg' -listen 1 http://${TSIP}:8080/live; sleep 1; done" > ffmpeg.log 2>&1 &
+          VF="scale=960:-2"
+          if ffmpeg -hide_banner -filters 2>/dev/null | grep -q drawtext; then
+            VF="scale=960:-2,drawtext=fontfile=/System/Library/Fonts/Supplemental/Arial.ttf:text='%{localtime\:%T}':fontsize=28:fontcolor=yellow:box=1:boxcolor=black@0.6:x=10:y=10"
+            echo "runner clock drawn in the top left corner, Paris time"
+          else
+            echo "this ffmpeg has no drawtext: no clock in the image"
+          fi
+          export VF
+          nohup bash -c "while true; do TZ=Europe/Paris ffmpeg -hide_banner -loglevel warning -fflags nobuffer -flags low_delay -f avfoundation -framerate 30 -capture_cursor 1 -i '${IDX}:none' -vf \"\$VF\" -r 5 -c:v mjpeg -q:v 8 -f mpjpeg -content_type 'multipart/x-mixed-replace;boundary=ffmpeg' -listen 1 http://${TSIP}:8080/live; sleep 1; done" > ffmpeg.log 2>&1 &
           sleep 3
           echo "Open http://${TSIP}:8080/live in the browser"
 
@@ -79,7 +87,7 @@ jobs:
               if name:
                   print("CLOSE %s: %s" % (name, App.close(name)))
           browser = os.environ.get("BROWSER")
-          page = "file://" + folder + "cross-os.html"
+          page = "http://127.0.0.1:8000/cross-os.html"
           if browser == "chrome":
               app = App("Google Chrome").setArguments(
                   ["--no-first-run", "--no-default-browser-check", "--use-mock-keychain",
@@ -104,6 +112,12 @@ jobs:
                   print("RESULT %s %dx%d: score %.3f, found %dx%d, scale %.2f, at %d,%d (%d ms)"
                         % (name, w, h, m.getScore(), m.w, m.h, m.w / float(w), m.x, m.y, ms))
           EOF
+
+      - name: Serve the page over http, Safari refuses a file:// URL from outside
+        run: |
+          nohup python3 -m http.server 8000 --bind 127.0.0.1 --directory cross-os > http.log 2>&1 &
+          sleep 2
+          curl -sI http://127.0.0.1:8000/cross-os.html | head -1
 
       - name: The PNG in Preview, search the Paint captures
         run: |
