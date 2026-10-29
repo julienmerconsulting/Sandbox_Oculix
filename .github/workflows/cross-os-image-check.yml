@@ -96,7 +96,7 @@ jobs:
               img = ImageIO.read(File(path))
               w, h = img.getWidth(), img.getHeight()
               start = time.time()
-              m = s.exists(Pattern(path).similar(0.7), 5)
+              m = s.exists(Pattern(path).similar(0.9), 5)
               ms = int((time.time() - start) * 1000)
               if m is None:
                   print("RESULT %s %dx%d: NOT FOUND (%d ms)" % (name, w, h, ms))
