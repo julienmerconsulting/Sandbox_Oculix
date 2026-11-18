@@ -13,7 +13,7 @@ on:
       os:
         description: Runner
         type: choice
-        options: [macos-15, macos-15-intel]
+        options: [macos-15, macos-26, macos-15-intel]
         default: macos-15
       watch_minutes:
         description: Minutes to keep the runner up on the tailnet after the check (0 = stop right away)
