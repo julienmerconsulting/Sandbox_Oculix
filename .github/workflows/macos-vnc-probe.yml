@@ -1,0 +1,76 @@
+name: macOS VNC probe
+
+# Can the macOS Screen Sharing server (VNC, port 5900) be turned on on a GitHub runner?
+# Short by default (~2 min): turn it on with kickstart, check that port 5900 answers, stop.
+# With watch_minutes > 0, the runner joins the tailnet as runner-mac and stays up,
+# so that OculiX can connect from the PC: VNCScreen.start("runner-mac", 5900, ...).
+# VNC password: "oculix", in clear. The runner is thrown away at the end of the job
+# and can only be reached through the tailnet.
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: Runner
+        type: choice
+        options: [macos-15, macos-15-intel]
+        default: macos-15
+      watch_minutes:
+        description: Minutes to keep the runner up on the tailnet after the check (0 = stop right away)
+        default: '0'
+
+jobs:
+  probe:
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 30
+    steps:
+      - name: macOS version
+        run: |
+          sw_vers
+
+      - name: kickstart help (the options this macOS really has)
+        run: |
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -help > kickstart-help.txt 2>&1 || true
+          cat kickstart-help.txt
+
+      - name: Turn on Screen Sharing with a VNC password
+        env:
+          # Throwaway runner, reachable only through the tailnet: a plain password is enough.
+          VNC_PW: oculix
+        run: |
+          KS=/System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart
+          sudo "$KS" -activate -configure -access -on -allowAccessFor -allUsers -privs -all \
+            -clientopts -setvnclegacy -vnclegacy yes -setvncpw -vncpw "$VNC_PW" \
+            -restart -agent -console > kickstart.log 2>&1 || true
+          cat kickstart.log
+
+      - name: Does port 5900 answer?
+        run: |
+          sleep 5
+          if nc -z localhost 5900; then
+            echo "VNC PORT 5900 OPEN"
+          else
+            echo "VNC PORT 5900 CLOSED"
+          fi
+          sudo lsof -nP -iTCP:5900 -sTCP:LISTEN || true
+
+      - name: Join the tailnet as runner-mac
+        if: inputs.watch_minutes != '0'
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          hostname: runner-mac
+
+      - name: Keep the runner up for the VNC test
+        if: inputs.watch_minutes != '0'
+        run: |
+          echo "Connect from the PC: VNCScreen.start(\"runner-mac\", 5900, ...)"
+          sleep $(( ${{ inputs.watch_minutes }} * 60 ))
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vnc-probe-${{ inputs.os }}
+          path: |
+            kickstart-help.txt
+            kickstart.log
